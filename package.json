@@ -40,7 +40,7 @@
     "@radix-ui/react-tooltip": "^1.2.0",
     "@tanstack/react-query": "^5.60.5",
     "class-variance-authority": "^0.7.1",
-    "esbuild": "^0.25.0",
+    "esbuild": "0.27.2",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "connect-pg-simple": "^10.0.0",
@@ -105,6 +105,7 @@
     
   },
   "overrides": {
+    "esbuild": {"0.27.2": "0.27.2"},
     "drizzle-kit": {
       "@esbuild-kit/esm-loader": "npm:tsx@^4.20.4"
     }
