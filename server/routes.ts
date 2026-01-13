@@ -5,7 +5,6 @@ import { api } from "@shared/routes";
 import { z } from "zod";
 import OpenAI from "openai";
 
-// Initialize OpenAI client
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
@@ -13,24 +12,15 @@ const openai = new OpenAI({
 
 export async function registerRoutes(
   httpServer: Server,
-  app: Express
+  app: Express,
 ): Promise<Server> {
-  
   app.post(api.scan.process.path, async (req, res) => {
     try {
       const input = api.scan.process.input.parse(req.body);
-      const { image } = input;
+      let { image } = input;
 
-      // Construct image data URL if needed, or assume base64 part
-      // OpenAI expects: "data:image/jpeg;base64,{base64_image}" or url
-      // If client sends raw base64, we might need to prepend prefix if missing.
-      // But typically client sends full data URL or we handle it.
-      // Let's assume input.image is the full data URL or base64 string.
-      // If it's just base64, we should prepend "data:image/jpeg;base64," or similar if user didn't.
-      // However, robust handling is better.
-      let imageUrl = image;
       if (!image.startsWith("data:")) {
-         imageUrl = `data:image/jpeg;base64,${image}`;
+        image = `data:image/jpeg;base64,${image}`;
       }
 
       const response = await openai.chat.completions.create({
@@ -39,56 +29,57 @@ export async function registerRoutes(
           {
             role: "user",
             content: [
-              { type: "text", text: "Identify the food in this image. Return ONLY a JSON object with a 'foodName' field. If no food is detected, return 'Unknown Food'." },
+              {
+                type: "text",
+                text: 'Identify the food in this image. Return ONLY JSON like {"foodName": "Pizza"}.',
+              },
               {
                 type: "image_url",
-                image_url: {
-                  url: imageUrl,
-                },
+                image_url: { url: image },
               },
             ],
           },
         ],
         response_format: { type: "json_object" },
-        max_tokens: 300,
+        max_tokens: 100,
       });
 
       const content = response.choices[0].message.content;
-      if (!content) {
-        throw new Error("No content received from AI");
-      }
+      if (!content) throw new Error("No AI response");
 
       let result;
       try {
         result = JSON.parse(content);
-      } catch (e) {
-        // Fallback if not valid JSON (shouldn't happen with json_object mode but safe to handle)
+      } catch {
         result = { foodName: content };
       }
 
       const foodName = result.foodName || "Unknown Food";
-      
-      // Store scan
-      const savedScan = await storage.createScan({
+
+      await storage.createScan({
         foodName,
-        imageUrl: image.length > 100000 ? null : image, // Don't store huge images in text column
+        imageUrl: image.length > 100000 ? null : image,
         analysis: result,
       });
 
-      res.status(200).json({
+      res.json({
         foodName,
-        analysis: result
+        success: true,
       });
-
     } catch (err) {
       console.error("Scan error:", err);
+
       if (err instanceof z.ZodError) {
         return res.status(400).json({
+          success: false,
           message: err.errors[0].message,
-          field: err.errors[0].path.join('.'),
         });
       }
-      res.status(500).json({ message: "Failed to process image" });
+
+      res.status(500).json({
+        success: false,
+        foodName: "Unknown Food",
+      });
     }
   });
 
